@@ -11,6 +11,12 @@ CONFIG = {
     "ec_rep_address": "45 Regulatory Lane, Dublin, Ireland",
     "importer_address": None,  # set to a string if applicable, else None
 
+    # Where manufacturer info is required to appear in the PDF:
+    #   "last"       -> must appear on the last physical page (default)
+    #   <int>        -> must appear on that specific 1-indexed page, e.g. 1
+    #   None         -> search the whole document (no location requirement)
+    "manufacturer_info_page": "last",
+
     # ---- 1. Page Number Verification ----
     # Pattern used to find "Page X of Y" style footers/headers.
     "page_number_pattern": r"Page\s+(\d+)\s+of\s+(\d+)",

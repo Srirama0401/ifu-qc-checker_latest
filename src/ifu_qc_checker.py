@@ -403,30 +403,68 @@ class IFUQualityChecker:
     # 2. Manufacturer Information
     # ------------------------------------------------------
     def check_manufacturer_info(self):
-        full_text = "\n".join(self.pages_text)
         cfg = self.config
+        total_pages = len(self.pages_text)
+        full_text = "\n".join(self.pages_text)
 
-        def fuzzy_present(value):
+        # Where manufacturer info is required to appear.
+        # "last" -> last physical page. A positive int -> that 1-indexed
+        # page. None -> anywhere in the document (old behavior).
+        location = cfg.get("manufacturer_info_page", "last")
+        if location == "last":
+            target_idx = total_pages
+        elif isinstance(location, int) and 1 <= location <= total_pages:
+            target_idx = location
+        else:
+            target_idx = None  # search whole document
+
+        target_text = self.pages_text[target_idx - 1] if target_idx else full_text
+        page_label = target_idx if target_idx else None
+        location_desc = f"page {target_idx}" if target_idx else "the document"
+
+        def normalize(t):
+            return re.sub(r"\s+", " ", t).strip().lower()
+
+        def fuzzy_present(value, text):
             if not value:
                 return True
-            normalized_doc = re.sub(r"\s+", " ", full_text).lower()
-            normalized_val = re.sub(r"\s+", " ", value).strip().lower()
-            return normalized_val in normalized_doc
+            return normalize(value) in normalize(text)
 
         checks = [
-            ("manufacturer_name", "Manufacturer name does not match approved master"),
-            ("manufacturer_address", "Manufacturer address does not match exactly"),
-            ("ec_rep_address", "Authorized Representative (EC REP) address not found / mismatched"),
-            ("importer_address", "Importer/Distributor address not found / mismatched"),
+            ("manufacturer_name", "Manufacturer name"),
+            ("manufacturer_address", "Manufacturer address"),
+            ("ec_rep_address", "Authorized Representative (EC REP) address"),
+            ("importer_address", "Importer/Distributor address"),
         ]
 
-        for key, msg in checks:
+        for key, label in checks:
             value = cfg.get(key)
             if value is None:
                 continue
-            if not fuzzy_present(value):
-                self.report.add("2. Manufacturer Information", "FAIL", msg)
+            if fuzzy_present(value, target_text):
+                continue  # found where expected — pass
 
+            # Not found on the required page/location. Check whether it
+            # exists elsewhere in the document, to give a more precise
+            # failure message (missing entirely vs. misplaced).
+            if target_idx and fuzzy_present(value, full_text):
+                self.report.add(
+                    "2. Manufacturer Information", "FAIL",
+                    f"{label} was found elsewhere in the document but not "
+                    f"on {location_desc} as required",
+                    page=page_label
+                )
+            else:
+                self.report.add(
+                    "2. Manufacturer Information", "FAIL",
+                    f"{label} does not match approved master / not found "
+                    f"on {location_desc}",
+                    page=page_label
+                )
+
+        # Contact info consistency is checked across the whole document,
+        # since the same email/phone may legitimately appear on multiple
+        # pages (cover page + back page) and consistency is what matters.
         emails = set(re.findall(r"[\w.+-]+@[\w-]+\.[\w.-]+", full_text))
         phones = set(re.findall(r"\+?\d[\d\s\-()]{7,}\d", full_text))
         if len(emails) > 1:
