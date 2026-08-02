@@ -36,6 +36,7 @@ python run.py path/to/any/document.pdf
 Edit `config.py` — this is the only file you should need to touch to adapt the checker to a different manufacturer, symbol set, or date format. It holds:
 
 - Approved manufacturer name / address / EC REP address / importer address
+- **`manufacturer_info_page`** — where that information is required to appear: `"last"` (default), a specific 1-indexed page number, or `None` to allow it anywhere. If found elsewhere but not on the required page, the report distinguishes "missing entirely" from "found but misplaced"
 - Expected `Page X of Y` pattern
 - **Odd/even footer placement rule** — `enforce_left_right_placement` (on by default: odd pages must be right-aligned in the footer, even pages left-aligned) and `footer_zone_ratio` (how close to the bottom of the page counts as "footer")
 - Required regulatory symbol labels
