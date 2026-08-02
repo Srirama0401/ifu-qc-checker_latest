@@ -197,14 +197,35 @@ class IFUQualityChecker:
         self.config = config
         self.report = QCReport(source_file=Path(pdf_path).name)
         self.pages_text = []
+        self.pages_words = []   # list of word-dict lists (x0,x1,top,bottom,text)
+        self.pages_size = []    # list of (width, height)
         self._load()
 
     def _load(self):
         with pdfplumber.open(self.pdf_path) as pdf:
             for page in pdf.pages:
                 self.pages_text.append(page.extract_text() or "")
+                self.pages_words.append(page.extract_words())
+                self.pages_size.append((page.width, page.height))
         if not self.pages_text:
             raise ValueError("No pages found / PDF could not be read.")
+
+    @staticmethod
+    def _group_into_lines(words, tolerance=3):
+        """Group words into visual lines based on similar 'top' position."""
+        lines = []
+        for w in sorted(words, key=lambda w: (w["top"], w["x0"])):
+            placed = False
+            for line in lines:
+                if abs(line[0]["top"] - w["top"]) <= tolerance:
+                    line.append(w)
+                    placed = True
+                    break
+            if not placed:
+                lines.append([w])
+        for line in lines:
+            line.sort(key=lambda w: w["x0"])
+        return lines
 
     # ------------------------------------------------------
     # 1. Page Number Verification
@@ -261,6 +282,78 @@ class IFUQualityChecker:
                 "Declared page numbers are out of sequence relative to "
                 f"physical page order: {physical_order}"
             )
+
+    def check_page_placement(self):
+        """
+        Odd/even page number placement check:
+        odd-numbered pages should show their page number in the
+        FOOTER on the RIGHT side; even-numbered pages should show
+        it in the FOOTER on the LEFT side.
+        """
+        if not self.config.get("enforce_left_right_placement", False):
+            return
+
+        pattern = self.config["page_number_pattern"]
+        footer_zone_ratio = self.config.get("footer_zone_ratio", 0.85)
+
+        for idx, text in enumerate(self.pages_text, start=1):
+            match = re.search(pattern, text)
+            if not match:
+                continue  # already flagged as FAIL in check_page_numbers
+
+            declared_num = int(match.group(1))
+            words = self.pages_words[idx - 1]
+            page_width, page_height = self.pages_size[idx - 1]
+
+            # Find the visual line whose joined text matches the page
+            # number pattern, so we can get its bounding box on the page.
+            lines = self._group_into_lines(words)
+            match_line = None
+            for line in lines:
+                line_text = " ".join(w["text"] for w in line)
+                if re.search(pattern, line_text):
+                    match_line = line
+                    break
+
+            if not match_line:
+                self.report.add(
+                    "1. Page Number Verification", "WARN",
+                    "Could not determine on-page position of the page "
+                    "number for placement check", page=idx
+                )
+                continue
+
+            x0 = min(w["x0"] for w in match_line)
+            x1 = max(w["x1"] for w in match_line)
+            top = min(w["top"] for w in match_line)
+            center_x = (x0 + x1) / 2
+
+            # Vertical check: page number should sit in the footer zone
+            if top < page_height * footer_zone_ratio:
+                self.report.add(
+                    "1. Page Number Verification", "FAIL",
+                    "Page number is not positioned in the footer/below "
+                    "area of the page", page=idx
+                )
+
+            # Horizontal check: odd -> right half, even -> left half
+            is_right_half = center_x > (page_width / 2)
+            expects_right = (declared_num % 2 == 1)
+
+            if expects_right and not is_right_half:
+                self.report.add(
+                    "1. Page Number Verification", "FAIL",
+                    f"Page {declared_num} (odd) should be positioned on "
+                    "the RIGHT side of the footer, but was found on the "
+                    "left", page=idx
+                )
+            elif not expects_right and is_right_half:
+                self.report.add(
+                    "1. Page Number Verification", "FAIL",
+                    f"Page {declared_num} (even) should be positioned on "
+                    "the LEFT side of the footer, but was found on the "
+                    "right", page=idx
+                )
 
     # ------------------------------------------------------
     # 2. Manufacturer Information
@@ -401,6 +494,7 @@ class IFUQualityChecker:
     # ------------------------------------------------------
     def run_all(self):
         self.check_page_numbers()
+        self.check_page_placement()
         self.check_manufacturer_info()
         self.check_regulatory_symbols()
         self.check_dates()

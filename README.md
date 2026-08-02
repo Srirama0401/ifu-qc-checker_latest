@@ -2,7 +2,7 @@
 
 Automates QC checks on IFU (Instructions for Use) PDF documents:
 
-1. **Page Number Verification** — sequence, left/right placement of `Page X of Y`, missing/duplicate numbers, consistent format
+1. **Page Number Verification** — sequence, missing/duplicate numbers, consistent `Page X of Y` format, and **odd/even footer placement** (odd pages on the right, even pages on the left, positioned in the footer area)
 2. **Manufacturer Information** — manufacturer name/address, EC REP address, importer/distributor address, contact info consistency
 3. **Regulatory Symbols** — presence of required symbol captions (see limitation note below)
 4. **Date Verification** — manufacturing/revision/effective/version dates present and in a valid, correctly formatted date
@@ -37,6 +37,7 @@ Edit `config.py` — this is the only file you should need to touch to adapt the
 
 - Approved manufacturer name / address / EC REP address / importer address
 - Expected `Page X of Y` pattern
+- **Odd/even footer placement rule** — `enforce_left_right_placement` (on by default: odd pages must be right-aligned in the footer, even pages left-aligned) and `footer_zone_ratio` (how close to the bottom of the page counts as "footer")
 - Required regulatory symbol labels
 - Required date field labels and expected date format
 

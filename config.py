@@ -15,6 +15,14 @@ CONFIG = {
     # Pattern used to find "Page X of Y" style footers/headers.
     "page_number_pattern": r"Page\s+(\d+)\s+of\s+(\d+)",
 
+    # Left/right placement rule: ODD page numbers must appear in the
+    # footer on the RIGHT side of the page; EVEN page numbers must
+    # appear in the footer on the LEFT side.
+    "enforce_left_right_placement": True,
+    # Fraction of page height (from the top) below which content is
+    # considered to be in the "footer" zone. 0.85 = bottom 15% of page.
+    "footer_zone_ratio": 0.85,
+
     # ---- 3. Regulatory Symbols ----
     # Text labels/captions expected near each required symbol.
     # (True graphical shape-matching is available as an optional
