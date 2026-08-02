@@ -199,6 +199,7 @@ class IFUQualityChecker:
         self.pages_text = []
         self.pages_words = []   # list of word-dict lists (x0,x1,top,bottom,text)
         self.pages_size = []    # list of (width, height)
+        self._page_number_matches = {}
         self._load()
 
     def _load(self):
@@ -245,7 +246,7 @@ class IFUQualityChecker:
                 )
                 continue
             num, total = int(match.group(1)), int(match.group(2))
-            found[idx] = (num, total)
+            found[idx] = (num, total, match.group(0))
 
             if total != total_pages:
                 self.report.add(
@@ -256,7 +257,7 @@ class IFUQualityChecker:
 
         declared_nums = [v[0] for v in found.values()]
         seen = {}
-        for idx, (num, total) in found.items():
+        for idx, (num, total, raw) in found.items():
             seen.setdefault(num, []).append(idx)
 
         for num, idxs in seen.items():
@@ -282,6 +283,49 @@ class IFUQualityChecker:
                 "Declared page numbers are out of sequence relative to "
                 f"physical page order: {physical_order}"
             )
+
+        self._page_number_matches = found  # {idx: (num, total, raw_text)}
+
+    def check_page_number_format_consistency(self):
+        """
+        Verifies every page uses the exact same page-number formatting
+        (capitalization, spacing, punctuation) — not just that each one
+        loosely matches the regex pattern. E.g. "Page 1 of 4" vs
+        "page 1 of 4" vs "Page 1  of 4" (double space) are all flagged
+        as inconsistent even though all three match a lenient pattern.
+        """
+        found = getattr(self, "_page_number_matches", {})
+        if len(found) < 2:
+            return  # nothing to compare
+
+        def template_of(raw_text, num, total):
+            # Replace the specific digits with placeholders so we compare
+            # the surrounding text/format, not the numbers themselves.
+            t = raw_text.replace(str(num), "{N}", 1)
+            t = t.replace(str(total), "{T}", 1)
+            return t
+
+        templates = {
+            idx: template_of(raw, num, total)
+            for idx, (num, total, raw) in found.items()
+        }
+
+        # Majority template = the "expected" consistent format
+        counts = {}
+        for t in templates.values():
+            counts[t] = counts.get(t, 0) + 1
+        majority_template = max(counts, key=counts.get)
+
+        for idx, t in templates.items():
+            if t != majority_template:
+                raw = found[idx][2]
+                self.report.add(
+                    "1. Page Number Verification", "FAIL",
+                    f"Inconsistent page number format: '{raw}' does not "
+                    f"match the format used elsewhere in the document "
+                    f"(expected pattern like '{majority_template}')",
+                    page=idx
+                )
 
     def check_page_placement(self):
         """
@@ -494,6 +538,7 @@ class IFUQualityChecker:
     # ------------------------------------------------------
     def run_all(self):
         self.check_page_numbers()
+        self.check_page_number_format_consistency()
         self.check_page_placement()
         self.check_manufacturer_info()
         self.check_regulatory_symbols()
