@@ -11,7 +11,7 @@ CONFIG = {
     # Not visible in the reference page provided — set this if your
     # documents include it; leave as None to skip that check.
     "ec_rep_address": "Medtronic B.V., Earl Bakkenstraat 10, 6422 PJ Heerlen, Netherlands",
-    "importer_address": None,
+    "importer_address": "Medtronic B.V., Earl Bakkenstraat 10, 6422 PJ Heerlen, Netherlands",
 
     # Where manufacturer info is required to appear in the PDF:
     #   "last"       -> must appear on the last physical page (default)
